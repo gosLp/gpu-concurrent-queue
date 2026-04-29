@@ -1,0 +1,2 @@
+pmc: OccupancyPercent, MeanOccupancyPerCU, SQ_INSTS_VALU_INT32, SQ_INSTS_VALU_INT64
+kernel: simple_test_kernel high_contention_kernel balanced_chunk_kernel split_chunk_kernel

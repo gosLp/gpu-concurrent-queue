@@ -64,6 +64,54 @@ MAX_THREADS ?= $(THREADS)
 QUEUE_N ?= 32768
 EXTRA_FLAGS ?=
 
+# GPU family used for architecture-specific artifact defaults.
+# Override manually if detection fails:
+#   make tb QUEUE=gwfq GPU_FAMILY=mi210
+#   make tb QUEUE=gwfq GPU_FAMILY=mi300a
+GPU_FAMILY ?= $(shell bash scripts/detect_gpu_family.sh 2>/dev/null || echo unknown)
+
+# GWFQ artifact tuning defaults.
+# These only apply when QUEUE=gwfq.
+GWFQ_MI210_ENQ_PATIENCE ?= 2048
+GWFQ_MI210_DEQ_PATIENCE ?= 8192
+
+GWFQ_MI300A_ENQ_PATIENCE ?= 1024
+GWFQ_MI300A_DEQ_PATIENCE ?= 2048
+
+# Optional user override:
+#   make tb QUEUE=gwfq GWFQ_ENQ_PATIENCE=4096 GWFQ_DEQ_PATIENCE=4096
+GWFQ_ENQ_PATIENCE_USER := $(GWFQ_ENQ_PATIENCE)
+GWFQ_DEQ_PATIENCE_USER := $(GWFQ_DEQ_PATIENCE)
+
+ifeq ($(QUEUE),gwfq)
+  ifneq ($(strip $(GWFQ_ENQ_PATIENCE_USER)),)
+    GWFQ_ENQ_PATIENCE_FINAL := $(GWFQ_ENQ_PATIENCE_USER)
+  else ifeq ($(GPU_FAMILY),mi210)
+    GWFQ_ENQ_PATIENCE_FINAL := $(GWFQ_MI210_ENQ_PATIENCE)
+  else ifeq ($(GPU_FAMILY),mi300a)
+    GWFQ_ENQ_PATIENCE_FINAL := $(GWFQ_MI300A_ENQ_PATIENCE)
+  endif
+
+  ifneq ($(strip $(GWFQ_DEQ_PATIENCE_USER)),)
+    GWFQ_DEQ_PATIENCE_FINAL := $(GWFQ_DEQ_PATIENCE_USER)
+  else ifeq ($(GPU_FAMILY),mi210)
+    GWFQ_DEQ_PATIENCE_FINAL := $(GWFQ_MI210_DEQ_PATIENCE)
+  else ifeq ($(GPU_FAMILY),mi300a)
+    GWFQ_DEQ_PATIENCE_FINAL := $(GWFQ_MI300A_DEQ_PATIENCE)
+  endif
+endif
+
+GWFQ_TUNING_FLAGS :=
+
+ifeq ($(QUEUE),gwfq)
+  ifneq ($(strip $(GWFQ_ENQ_PATIENCE_FINAL)),)
+    GWFQ_TUNING_FLAGS += -DWF_ENQ_PATIENCE=$(GWFQ_ENQ_PATIENCE_FINAL)
+  endif
+  ifneq ($(strip $(GWFQ_DEQ_PATIENCE_FINAL)),)
+    GWFQ_TUNING_FLAGS += -DWF_DEQ_PATIENCE=$(GWFQ_DEQ_PATIENCE_FINAL)
+  endif
+endif
+
 ifeq ($(QUEUE),gwfq)
 RT_QUEUE_DEF := -DUSE_GWFQ
 RT_QUEUE_TAG := gwfq
@@ -97,6 +145,7 @@ rt-build:
 	@echo "[RT] Building $(RT_BIN) (queue=$(QUEUE), max_threads=$(MAX_THREADS), qN=$(QUEUE_N))"
 	$(HIPCXX) -O3 -std=c++17 \
 		$(RT_QUEUE_DEF) \
+		$(GWFQ_TUNING_FLAGS) \
 		-DRT_MAX_THREADS=$(MAX_THREADS) \
 		-DRT_QUEUE_N=$(QUEUE_N) \
 		$(EXTRA_FLAGS) \
@@ -110,9 +159,10 @@ tb: tb-run
 
 tb-build:
 	@mkdir -p $(TB_BUILD_DIR)
-	@echo "[TB] Building $(TB_BIN) (queue=$(QUEUE), fifo_mode=$(TB_FIFO_MODE))"
+	@echo "[TB] Building $(TB_BIN) (queue=$(QUEUE), fifo_mode=$(TB_FIFO_MODE), gpu_family=$(GPU_FAMILY), gwfq_flags=$(GWFQ_TUNING_FLAGS))"
 	$(HIPCXX) -O3 -std=c++17 \
 		$(RT_QUEUE_DEF) \
+		$(GWFQ_TUNING_FLAGS) \
 		-DRUN_MS=$(TB_RUN_MS) \
 		-DWARMUP_MS=$(TB_WARMUP_MS) \
 		-DCHUNK_OPS=$(TB_CHUNK_OPS) \
@@ -146,6 +196,7 @@ hist-build:
 	@echo "[HIST] Building $(HIST_BIN) (queue=$(QUEUE))"
 	$(HIPCXX) -O3 -std=c++17 \
 		$(RT_QUEUE_DEF) \
+		$(GWFQ_TUNING_FLAGS) \
 		-DHIST_THREADS=$(HIST_THREADS) \
 		-DHIST_OPS=$(HIST_OPS) \
 		-DHIST_MODE=$(HIST_MODE) \
@@ -180,6 +231,7 @@ bfs-build:
 	@echo "[BFS] Building $(BFS_BIN) (queue=$(QUEUE))"
 	$(HIPCXX) -O3 -std=c++17 \
 		$(RT_QUEUE_DEF) \
+		$(GWFQ_TUNING_FLAGS) \
 		$(BFS_EXTRA_FLAGS) \
 		$(BFS_SRC) -o $(BFS_BIN)
 
@@ -306,3 +358,91 @@ rt-help:
 	@echo "  BFS_GRAPHS    : optional graph list, e.g. 'ak2010 road_usa'"
 	@echo "  BFS_BLOCK, BFS_SRC_VERTEX, BFS_ITERS, BFS_WARMUP"
 	@echo "  BFS_LOG_DIR, BFS_CSV_NAME, BFS_GPU_FAMILY"
+
+# ---------------------------
+# Profiling targets
+# ---------------------------
+
+PROFILE_QUEUES ?= gwfq glfq wfq sfq
+PROFILE_WORKLOAD ?= tb
+PROFILE_FIFO_MODE ?= 0
+PROFILE_OUT_ROOT ?= results/profiling
+PROFILE_BIN_ROOT ?= out/profile
+PROFILE_EXTRA_MAKE_FLAGS ?=
+
+.PHONY: profile profile-tb profile-help
+
+profile: profile-tb
+
+profile-tb:
+	@PROFILE_QUEUES="$(PROFILE_QUEUES)" \
+	PROFILE_WORKLOAD="tb" \
+	PROFILE_FIFO_MODE="$(PROFILE_FIFO_MODE)" \
+	PROFILE_OUT_ROOT="$(PROFILE_OUT_ROOT)" \
+	PROFILE_BIN_ROOT="$(PROFILE_BIN_ROOT)" \
+	PROFILE_EXTRA_MAKE_FLAGS="$(PROFILE_EXTRA_MAKE_FLAGS)" \
+	bash profiling/run_profile.sh
+
+profile-help:
+	@echo "Profiling targets:"
+	@echo "  make profile-tb"
+	@echo "  make profile-tb PROFILE_QUEUES='gwfq glfq wfq sfq'"
+	@echo "  make profile-tb PROFILE_FIFO_MODE=1"
+	@echo "  make profile-tb GPU_FAMILY=mi210"
+	@echo "  make profile-tb GPU_FAMILY=mi300a"
+	@echo ""
+	@echo "Variables:"
+	@echo "  PROFILE_QUEUES      : queues to profile"
+	@echo "  PROFILE_FIFO_MODE   : 0 or 1"
+	@echo "  PROFILE_OUT_ROOT    : output root for rocprof CSVs"
+	@echo "  PROFILE_BIN_ROOT    : binary root used for profiling builds"
+	@echo "  GPU_FAMILY          : optional override: mi210 | mi300a"
+
+	# ---------------------------
+# Plotting targets
+# ---------------------------
+
+FIGURE_DIR ?= results/figures
+THROUGHPUT_CSV ?= benchmark_results.csv
+
+.PHONY: plot-throughput plot-profile plot-profile-mi210 plot-profile-mi300a plot-rt plot-bfs plots-paper plots-help
+
+plot-throughput:
+	@mkdir -p $(FIGURE_DIR)
+	python3 plots/plot_queue_throughput.py \
+		--csv $(THROUGHPUT_CSV) \
+		--metric succ_mops \
+		--out $(FIGURE_DIR)/throughput_compact_2x4.png \
+		--title "Fixed-Duration Successful-Operation Throughput"
+
+plot-profile:
+	@mkdir -p $(FIGURE_DIR)
+	python3 plots/plot_profile.py
+
+plot-profile-mi210:
+	@mkdir -p $(FIGURE_DIR)
+	python3 plots/plot_profile.py --gpu MI210
+
+plot-profile-mi300a:
+	@mkdir -p $(FIGURE_DIR)
+	python3 plots/plot_profile.py --gpu MI300A
+
+plot-rt:
+	@mkdir -p $(FIGURE_DIR)
+	python3 plots/plot_rt.py
+
+plot-bfs:
+	@mkdir -p $(FIGURE_DIR)
+	python3 plots/plot_bfs.py
+
+plots-paper: plot-throughput plot-profile plot-rt plot-bfs
+
+plots-help:
+	@echo "Plotting targets:"
+	@echo "  make plot-throughput      # throughput 2x4 from benchmark_results.csv"
+	@echo "  make plot-profile-mi210   # MI210 profiling 2x4 only"
+	@echo "  make plot-profile-mi300a  # MI300A profiling 2x4 only"
+	@echo "  make plot-profile         # both profiling 2x4 plots"
+	@echo "  make plot-rt              # RT relative 1x4 plot"
+	@echo "  make plot-bfs             # BFS centered relative plot"
+	@echo "  make plots-paper          # all paper figures"

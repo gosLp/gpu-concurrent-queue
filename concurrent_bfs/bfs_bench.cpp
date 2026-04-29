@@ -787,14 +787,34 @@ QueueT *d_q_a = nullptr, *d_q_b = nullptr;
 
     // put result into a csv file for easier plotting later
     {
+        
         const char* csv_env = std::getenv("CSV_NAME");
-        const char* csv = (csv_env && csv_env[0] != '\0') ? csv_env : "bfs_bench_final2.csv";
-        bool csv_exists = std::ifstream(csv).good();
+        const char* csv = (csv_env && csv_env[0] != '\0')
+            ? csv_env
+            : "bfs_bench_final.csv";
+
+        bool write_header = false;
+        {
+            std::ifstream in(csv);
+            write_header = (!in.good() || in.peek() == std::ifstream::traits_type::eof());
+        }
+
         std::ofstream ofs(csv, std::ios::app);
-        ofs << gpu_name << "," << QUEUE_NAME << "," << gname_from_path(graph_path) << "," << g.V << "," << g.E
-            << "," << threads << "," << block
-            << "," << st.med << "," << st.iqr
-            << "," << (se.med/1e9) << "," << (se.iqr/1e9) << "\n";
+        if (!ofs) {
+            std::cerr << "Failed to open CSV for append: " << csv << "\n";
+            return 1;
+        }
+
+        if (write_header) {
+            ofs << "GPU,Graph,Queue,Threads,Time_ms\n";
+        }
+
+        ofs << gpu_name << ","
+            << gname_from_path(graph_path) << ","
+            << QUEUE_NAME << ","
+            << threads << ","
+            << std::fixed << std::setprecision(6) << st.med
+            << "\n";
     }
 
     /* Cleanup */

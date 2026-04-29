@@ -975,7 +975,7 @@ int main(int argc, char** argv) {
     std::ofstream ofs(csv, std::ios::app);
     if (ofs) {
         if (!csv_exists){
-            ofs << "GPU,QUEUE,SCENE,THREADS,BOUNCES,PRIMARY,TOTAL,GEN_MS,TRACE_MS,TOTAL_MS,MRAYS\n";
+            ofs << "DEVICE,QUEUE,SCENE,THREADS,BOUNCES,TOTAL_RAYS,TOTAL_TIME_MS,MRAYS_PER_S\n";
         }
         #if defined(USE_GLFQ)
                 const char* queue_name = "GLFQ";

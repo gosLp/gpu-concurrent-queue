@@ -6,8 +6,9 @@ This directory contains three main GPU queue workflows:
 - Throughput benchmark (`throughout_bench.cpp`)
 - History generation + FIFO linearizability checking (`correctness/history.cpp`, `correctness/lincheck/main.go`)
 - BFS benchmark and sweeps (`concurrent_bfs/bfs_bench.cpp`, `concurrent_bfs/run_bfs_sweep.sh`)
+- Throughput Profiling with Rocprofv2 for each QUEUE type on GPU (`profiling/run_profile.sh`)
 
-All commands below are run from this directory (`wfq/final`).
+All commands below are run from the root directory.
 
 ## Queue names used here
 
@@ -18,7 +19,7 @@ All commands below are run from this directory (`wfq/final`).
 
 Only these four queues are supported through this Makefile: `gwfq | glfq | wfq | sfq`.
 
-## 1) Raytracing (RT) benchmark
+## 1. Raytracing (RT) benchmark
 
 Build + run:
 
@@ -75,7 +76,7 @@ Example tuned run:
 make tb-run-fifo QUEUE=sfq TB_RUN_MS=1000 TB_WARMUP_MS=200 TB_CHUNK_OPS=128 TB_FIFO_OPS_PER_THREAD=32
 ```
 
-## 3) Emit histories (JSONL)
+## 3. Emit histories (JSONL)
 
 Generate a single queue history JSONL:
 
@@ -113,7 +114,7 @@ Example:
 make hist-run QUEUE=wfq HIST_MODE=1 HIST_THREADS=128 HIST_OPS=32 HIST_PRODUCER_PERCENT=25
 ```
 
-## 4) Linearizability check (Porcupine, Go)
+## 4. Linearizability check (Porcupine, Go)
 
 Prerequisites:
 
@@ -139,13 +140,13 @@ Expected checker output status:
 - `Linearizable (FIFO)` -> success (exit code 0)
 - `Not linearizable (FIFO)` or `Unknown (timeout)` -> failure (exit code 1)
 
-## 5) Quick make help
+## 5. Quick make help
 
 ```bash
 make rt-help
 ```
 
-## 6) BFS benchmark and sweeps
+## 6. BFS benchmark and sweeps
 
 Build one BFS binary for a selected queue:
 
@@ -206,7 +207,7 @@ make bfs-sweep \
 	BFS_CSV_NAME=concurrent_bfs/bfs_bench_final.csv
 ```
 
-## 7) Baselines
+## 7. Baselines
 
 Baseline usage notes are documented in:
 
@@ -216,6 +217,16 @@ Baseline usage notes are documented in:
 RT compaction baseline source is in:
 
 - `concurrent_rt/baselines/rt_compaction.cpp`
+
+
+## 8. Profiling with rocprofv2
+
+The profiling workflow builds the selected queue binaries through the Makefile, auto-detects the local AMD GPU family, selects the appropriate rocprof metric files, and writes all profiling CSVs under `results/profiling`.
+
+Basic throughput profiling:
+
+```bash
+make profile-tb
 
 ## 8) License
 

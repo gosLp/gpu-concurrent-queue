@@ -1,0 +1,2 @@
+pmc: SQ_WAIT_ANY, SQ_ACTIVE_INST_FLAT, SQ_ACTIVE_INST_VMEM, SQ_WAVE_CYCLES
+kernel: simple_test_kernel high_contention_kernel balanced_kernel contention_kernel balanced_chunk_kernel split_chunk_kernel

@@ -1,9 +1,21 @@
 out/
+venv/
 concurrent_bfs/out/
 concurrent_bfs/graphs/*.mtx
 !concurrent_bfs/graphs/README.md
+
 trash/
 *.log
 *.o
 *.ppm
+
+# Ignore generated CSVs by default.
 *.csv
+
+# Keep final artifact/research CSVs in the repo root.
+!/benchmark_results.csv
+!/rt_queue_perf.csv
+!/bfs_bench_final.csv
+
+# Ignore generated result directories.
+results/

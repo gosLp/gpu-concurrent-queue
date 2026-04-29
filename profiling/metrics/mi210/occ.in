@@ -1,0 +1,2 @@
+pmc: TD_ATOMIC_WAVEFRONT_sum, SQ_INSTS_VALU_INT32,  SQ_INSTS_VALU_INT64, TCC_ATOMIC_sum
+kernel: simple_test_kernel high_contention_kernel balanced_kernel contention_kernel balanced_chunk_kernel split_chunk_kernel
